@@ -73,7 +73,8 @@ def load_ckpt(ckpt_path):
 
     config = saved_ckpt["config_dict"]["_content"]
 
-    # 2) 모델을 CPU 상에서 instantiate하고, eval 모드로 전환
+    # 2) 모델을 CPU 상에서 instantiate 하고, eval 모드로 전환
+    # TODO: 어떤 코드에서 인스턴스를 생성하는지 확인 필요
     model = instantiate_from_config(config['model']).eval()
     autoencoder = instantiate_from_config(config['autoencoder']).eval()
     text_encoder = instantiate_from_config(config['text_encoder']).eval()
@@ -371,6 +372,11 @@ def run(meta, config, starting_noise=None):
     model, autoencoder, text_encoder, diffusion, config = load_ckpt(
         meta["ckpt"])
 
+    ###
+    """
+    dataloader와 grounding_tokenizer 사이의 중간 class
+    grounding_input/__init__.py 을 참조
+    """
     grounding_tokenizer_input = instantiate_from_config(
         config['grounding_tokenizer_input'])
     model.grounding_tokenizer_input = grounding_tokenizer_input
