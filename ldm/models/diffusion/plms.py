@@ -6,6 +6,7 @@ from copy import deepcopy
 from ldm.modules.diffusionmodules.util import make_ddim_sampling_parameters, make_ddim_timesteps, noise_like
 
 
+
 class PLMSSampler(object):
     def __init__(self, diffusion, model, schedule="linear", alpha_generator_func=None, set_alpha_scale=None):
         super().__init__()

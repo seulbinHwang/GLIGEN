@@ -75,6 +75,19 @@ def load_ckpt(ckpt_path):
 
     # 2) 모델을 CPU 상에서 instantiate 하고, eval 모드로 전환
     # TODO: 어떤 코드에서 인스턴스를 생성하는지 확인 필요
+    """
+    config
+        - model:
+{'target': 'ldm.modules.diffusionmodules.openaimodel.UNetModel', 'params': {'image_size': 64, 'in_channels': 4, 'out_channels': 4, 'model_channels': 320, 'attention_resolutions': [4, 2, 1], 'num_res_blocks': 2, 'channel_mult': [1, 2, 4, 4], 'num_heads': 8, 'transformer_depth': 1, 'context_dim': 768, 'fuser_type': 'gatedSA', 'use_checkpoint': True, 'grounding_tokenizer': {'target': 'ldm.modules.diffusionmodules.text_grounding_net.PositionNet', 'params': {'in_dim': 768, 'out_dim': 768}}}}
+        - autoencoder
+{'target': 'ldm.models.autoencoder.AutoencoderKL', 'params': {'scale_factor': 0.18215, 'embed_dim': 4, 'ddconfig': {'double_z': True, 'z_channels': 4, 'resolution': 256, 'in_channels': 3, 'out_ch': 3, 'ch': 128, 'ch_mult': [1, 2, 4, 4], 'num_res_blocks': 2, 'attn_resolutions': [], 'dropout': 0.0}}}
+        - text encoder
+{'target': 'ldm.modules.encoders.modules.FrozenCLIPEmbedder'}
+        - diffusion
+{'target': 'ldm.models.diffusion.ldm.LatentAutoencoderKLDiffusion', 'params': {'linear_start': 0.00085, 'linear_end': 0.012, 'timesteps': 1000}}
+Traceback (most recent call last):
+
+    """
     model = instantiate_from_config(config['model']).eval()
     autoencoder = instantiate_from_config(config['autoencoder']).eval()
     text_encoder = instantiate_from_config(config['text_encoder']).eval()
@@ -513,7 +526,7 @@ if __name__ == "__main__":
     meta_list = [
 
         # - - - - - - - - GLIGEN on text grounding for generation - - - - - - - - #
-        dict(ckpt="../gligen_checkpoints/diffusion_pytorch_model.bin",
+        dict(ckpt="./gligen_checkpoints/diffusion_pytorch_model.bin",
              prompt="A bird's-eye view of a complex road situation with high density of cars",
              phrases=["road", "intersection"],
              locations=[[0.45, 0.0, 0.55, 1.0], [0.0, 0.45, 1.0, 0.55]],

@@ -21,10 +21,7 @@ class PositionNet(nn.Module):
 
 """
 
-
-# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = # 
-
-
+# = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = #
 """
 This is a high-level pseudo code for downsampler. 
 
