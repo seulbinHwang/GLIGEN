@@ -7,6 +7,7 @@ from ldm.modules.diffusionmodules.util import make_ddim_sampling_parameters, mak
 
 
 
+
 class PLMSSampler(object):
     def __init__(self, diffusion, model, schedule="linear", alpha_generator_func=None, set_alpha_scale=None):
         super().__init__()
@@ -17,6 +18,9 @@ class PLMSSampler(object):
         self.schedule = schedule
         self.alpha_generator_func = alpha_generator_func
         self.set_alpha_scale = set_alpha_scale
+
+
+
 
     def register_buffer(self, name, attr):
         if type(attr) == torch.Tensor:
