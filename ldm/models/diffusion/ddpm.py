@@ -15,7 +15,7 @@ class DDPM(nn.Module):
                  cosine_s=8e-3):
         super().__init__()
 
-        self.v_posterior = 0
+        self.v_posterior = 0 # Improved DDPM에서 학습의 output 중 하나.
         self.register_schedule(beta_schedule, timesteps, linear_start,
                                linear_end, cosine_s)
 
@@ -25,7 +25,7 @@ class DDPM(nn.Module):
                           linear_start=1e-4,
                           linear_end=2e-2,
                           cosine_s=8e-3):
-
+        # beta: (timesteps,)
         betas = make_beta_schedule(beta_schedule,
                                    timesteps,
                                    linear_start=linear_start,
@@ -44,7 +44,7 @@ class DDPM(nn.Module):
 
         to_torch = partial(torch.tensor, dtype=torch.float32)
 
-        self.register_buffer('betas', to_torch(betas))
+        self.register_buffer(name='betas', tensor=to_torch(betas))
         self.register_buffer('alphas_cumprod', to_torch(alphas_cumprod))
         self.register_buffer('alphas_cumprod_prev',
                              to_torch(alphas_cumprod_prev))

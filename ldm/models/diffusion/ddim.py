@@ -15,8 +15,8 @@ class DDIMSampler(object):
                  alpha_generator_func=None,
                  set_alpha_scale=None):
         super().__init__()
-        self.diffusion = diffusion
-        self.model = model
+        self.diffusion = diffusion # 'ldm.models.diffusion.ldm.LatentDiffusion'
+        self.model = model # 'ldm.modules.diffusionmodules.openaimodel.UNetModel'
         self.device = diffusion.betas.device
         self.ddpm_num_timesteps = diffusion.num_timesteps
         self.schedule = schedule
@@ -42,7 +42,17 @@ class DDIMSampler(object):
             0] == self.ddpm_num_timesteps, 'alphas have to be defined for each timestep'
         to_torch = lambda x: x.clone().detach().to(torch.float32).to(self.device
                                                                     )
+        """
+`register_buffer` 함수는 PyTorch의 `nn.Module` 클래스에서 사용되는 메서드로, 모듈에 버퍼를 추가하는 역할을 합니다. 
+버퍼는 모델의 파라미터는 아니지만, 모델의 상태를 저장하는 데 사용됩니다. 
+버퍼는 기본적으로 지속적(persistent)이며, 모델의 파라미터와 함께 저장됩니다. 
+지속적이지 않은 버퍼는 `state_dict`에 포함되지 않습니다. 
 
+이 함수의 주요 역할은 다음과 같습니다:
+- 버퍼를 모듈의 속성으로 등록
+- 버퍼의 지속성 여부 설정
+- 버퍼를 `state_dict`에 포함할지 여부 결정
+        """
         self.register_buffer('betas', to_torch(self.diffusion.betas))
         self.register_buffer('alphas_cumprod', to_torch(alphas_cumprod))
         self.register_buffer('alphas_cumprod_prev',

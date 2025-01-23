@@ -5,7 +5,18 @@ from functools import partial
 from copy import deepcopy
 from ldm.modules.diffusionmodules.util import make_ddim_sampling_parameters, make_ddim_timesteps, noise_like
 
+"""
+Pseudo Linear Multistep (PLMS) 방법은 특히 확산 모델의 맥락에서 미분 방정식을 해결하는 데 사용되는 수치적 기법
+이러한 방법은 여러 이전 단계의 정보를 결합하여 솔루션의 정확성과 안정성을 향상시키기 위해 설계
 
+`PLMSSampler` 클래스의 맥락에서 PLMS 방법은 확산 과정에서 샘플링하는 데 사용
+이 클래스는 다음과 같은 다양한 차수의 Pseudo Linear Multistep 방법을 구현
+
+- **2차 Pseudo Linear Multistep (Adams-Bashforth)**: 현재 단계와 이전 단계를 결합하여 다음 값을 예측
+- **3차 Pseudo Linear Multistep (Adams-Bashforth)**: 현재 단계와 두 개의 이전 단계를 사용
+- **4차 Pseudo Linear Multistep (Adams-Bashforth)**: 현재 단계와 세 개의 이전 단계를 사용
+
+"""
 class PLMSSampler(object):
 
     def __init__(self,
@@ -35,6 +46,11 @@ class PLMSSampler(object):
                       verbose=False):
         if ddim_eta != 0:
             raise ValueError('ddim_eta must be 0 for PLMS')
+        """
+        ddpm_num_steps: 1000
+        ddim_num_steps: 50
+        self.ddim_timesteps: shape: 20 , np.array([1, 51, 101, 151, ... ])
+        """
         self.ddim_timesteps = make_ddim_timesteps(
             ddim_discr_method=ddim_discretize,
             num_ddim_timesteps=ddim_num_steps,
@@ -45,7 +61,7 @@ class PLMSSampler(object):
             0] == self.ddpm_num_timesteps, 'alphas have to be defined for each timestep'
         to_torch = lambda x: x.clone().detach().to(torch.float32).to(self.device
                                                                     )
-
+        # # beta: (ddpm_num_steps,)
         self.register_buffer('betas', to_torch(self.diffusion.betas))
         self.register_buffer('alphas_cumprod', to_torch(alphas_cumprod))
         self.register_buffer('alphas_cumprod_prev',
@@ -65,9 +81,9 @@ class PLMSSampler(object):
 
         # ddim sampling parameters
         ddim_sigmas, ddim_alphas, ddim_alphas_prev = make_ddim_sampling_parameters(
-            alphacums=alphas_cumprod.cpu(),
-            ddim_timesteps=self.ddim_timesteps,
-            eta=ddim_eta,
+            alphacums=alphas_cumprod.cpu(), # (1000)
+            ddim_timesteps=self.ddim_timesteps, # (20)
+            eta=ddim_eta, # 0
             verbose=verbose)
         self.register_buffer('ddim_sigmas', ddim_sigmas)
         self.register_buffer('ddim_alphas', ddim_alphas)

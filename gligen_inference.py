@@ -22,6 +22,10 @@ device = "cuda"
 
 
 def set_alpha_scale(model, alpha_scale):
+    """
+    model: # 'ldm.modules.diffusionmodules.openaimodel.UNetModel'
+    alpha_scale: 특정 timestep에서의 alpha
+    """
     from ldm.modules.attention import GatedCrossAttentionDense, \
         GatedSelfAttentionDense
     for module in model.modules():
@@ -78,19 +82,22 @@ def load_ckpt(ckpt_path):
     """
     config
         - model:
-{config['model']: {}'target': 'ldm.modules.diffusionmodules.openaimodel.UNetModel', 'params': {'image_size': 64, 'in_channels': 4, 'out_channels': 4, 'model_channels': 320, 'attention_resolutions': [4, 2, 1], 'num_res_blocks': 2, 'channel_mult': [1, 2, 4, 4], 'num_heads': 8, 'transformer_depth': 1, 'context_dim': 768, 'fuser_type': 'gatedSA', 'use_checkpoint': True, 'grounding_tokenizer': {'target': 'ldm.modules.diffusionmodules.text_grounding_net.PositionNet', 'params': {'in_dim': 768, 'out_dim': 768}}}}
+{'target': 'ldm.modules.diffusionmodules.openaimodel.UNetModel', 
+'params': {'image_size': 64, 'in_channels': 4, 'out_channels': 4, 'model_channels': 320, 'attention_resolutions': [4, 2, 1], 'num_res_blocks': 2, 'channel_mult': [1, 2, 4, 4], 'num_heads': 8, 'transformer_depth': 1, 'context_dim': 768, 'fuser_type': 'gatedSA', 'use_checkpoint': True, 'grounding_tokenizer': {'target': 'ldm.modules.diffusionmodules.text_grounding_net.PositionNet', 'params': {'in_dim': 768, 'out_dim': 768}}}}
         - autoencoder
-{'target': 'ldm.models.autoencoder.AutoencoderKL', 'params': {'scale_factor': 0.18215, 'embed_dim': 4, 'ddconfig': {'double_z': True, 'z_channels': 4, 'resolution': 256, 'in_channels': 3, 'out_ch': 3, 'ch': 128, 'ch_mult': [1, 2, 4, 4], 'num_res_blocks': 2, 'attn_resolutions': [], 'dropout': 0.0}}}
+{'target': 'ldm.models.autoencoder.AutoencoderKL', 
+'params': {'scale_factor': 0.18215, 'embed_dim': 4, 
+'ddconfig': {'double_z': True, 'z_channels': 4, 'resolution': 256, 'in_channels': 3, 'out_ch': 3, 'ch': 128, 'ch_mult': [1, 2, 4, 4], 'num_res_blocks': 2, 'attn_resolutions': [], 'dropout': 0.0}}}
         - text encoder
 {'target': 'ldm.modules.encoders.modules.FrozenCLIPEmbedder'}
         - diffusion
-{'target': 'ldm.models.diffusion.ldm.LatentDiffusion', 'params': {'linear_start': 0.00085, 'linear_end': 0.012, 'timesteps': 1000}}    """
+{'target': 'ldm.models.diffusion.ldm.LatentDiffusion', 
+'params': {'linear_start': 0.00085, 'linear_end': 0.012, 'timesteps': 1000}}
+    """
     model = instantiate_from_config(config['model']).eval()
     autoencoder = instantiate_from_config(config['autoencoder']).eval()
     text_encoder = instantiate_from_config(config['text_encoder']).eval()
     diffusion = instantiate_from_config(config['diffusion'])
-    print("config['diffusion']:", config['diffusion'])
-    raise NotImplementedError
     # 3) state_dict 로드(여전히 CPU 상에서)
     model.load_state_dict(saved_ckpt['model'])
     autoencoder.load_state_dict(saved_ckpt["autoencoder"])
@@ -422,7 +429,13 @@ def run(meta, config, starting_noise=None):
         uc = text_encoder.encode(config.batch_size * [args.negative_prompt])
 
     # - - - - - sampler - - - - - #
-    alpha_generator_func = partial(alpha_generator, type=meta.get("alpha_type"))
+    """
+    1000 step이면, 
+    0 step ~ 1000 * 0.3 = 300 step까지는 alpha=1
+    300 step ~ 300 step 구간에서는 linear decay from 1 to 0
+    300 step ~ 1000 step까지는 alpha=0
+    """
+    alpha_generator_func = partial(alpha_generator, type=meta.get("alpha_type")) # [0.3, 0.0, 0.7]
     if config.no_plms:
         sampler = DDIMSampler(diffusion,
                               model,
