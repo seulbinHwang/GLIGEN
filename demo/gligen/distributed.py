@@ -9,6 +9,7 @@ from ldm.util import default_device
 
 device = default_device()
 
+
 def get_rank():
     if not dist.is_available():
         return 0
@@ -55,7 +56,7 @@ def reduce_sum(tensor):
 
 def gather_grad(params):
     world_size = get_world_size()
-    
+
     if world_size == 1:
         return
 

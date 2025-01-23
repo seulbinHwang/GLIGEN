@@ -62,9 +62,9 @@ def make_beta_schedule(schedule,
     return betas.numpy()
 
 
-def make_ddim_timesteps(ddim_discr_method,
-                        num_ddim_timesteps,
-                        num_ddpm_timesteps,
+def make_ddim_timesteps(ddim_discr_method, # 'uniform'
+                        num_ddim_timesteps, # 250
+                        num_ddpm_timesteps, # 1000
                         verbose=True):
     if ddim_discr_method == 'uniform':
         c = num_ddpm_timesteps // num_ddim_timesteps
@@ -187,10 +187,15 @@ def timestep_embedding(timesteps, dim, max_period=10000, repeat_only=False):
     Create sinusoidal timestep embeddings.
     :param timesteps: a 1-D Tensor of N indices, one per batch element.
                       These may be fractional.
+        (batch_size) -> step 값으로 전부 채워짐
     :param dim: the dimension of the output.
     :param max_period: controls the minimum frequency of the embeddings.
+max_period 변수는 임베딩의 최소 주파수를 제어
+이 변수는 주파수의 범위를 설정하여, 주파수가 너무 작거나 너무 커지는 것을 방지
+이를 통해 임베딩이 적절한 주파수 범위 내에서 생성되도록 합니다.
     :return: an [N x dim] Tensor of positional embeddings.
     """
+    # TODO:
     if not repeat_only:
         half = dim // 2
         freqs = torch.exp(-math.log(max_period) *
@@ -261,6 +266,12 @@ def conv_nd(dims, *args, **kwargs):
     if dims == 1:
         return nn.Conv1d(*args, **kwargs)
     elif dims == 2:
+        """
+        dims = 2
+        in_c = in_channels = 4
+        model_channels = 320 (out_c)
+        stride = 1 (default)
+        """
         return nn.Conv2d(*args, **kwargs)
     elif dims == 3:
         return nn.Conv3d(*args, **kwargs)

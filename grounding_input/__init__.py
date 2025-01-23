@@ -8,7 +8,8 @@ prepare() takes in batch from dataloader and output input args for Grounding Tok
 get_null_input() will output null input args for Grounding Tokenizer. 
 
 
-get_null_input() usually requires additional information from prepare() such as certain feature dimension,
+get_null_input() usually requires additional information from prepare()
+    such as certain feature dimension,
 thus typecially get_null_input() should be called at least prepare() was called once before, 
 thus 'set' is used to tell if prepare() has been called or not 
 

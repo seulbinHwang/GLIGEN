@@ -15,11 +15,22 @@ class DDIMSampler(object):
                  alpha_generator_func=None,
                  set_alpha_scale=None):
         super().__init__()
+        """
+ # 'ldm.models.diffusion.ldm.LatentDiffusion'
+    LatentDiffusion(DDPM)
+        """
         self.diffusion = diffusion # 'ldm.models.diffusion.ldm.LatentDiffusion'
+
         self.model = model # 'ldm.modules.diffusionmodules.openaimodel.UNetModel'
         self.device = diffusion.betas.device
-        self.ddpm_num_timesteps = diffusion.num_timesteps
+        self.ddpm_num_timesteps = diffusion.num_timesteps # 1000
         self.schedule = schedule
+        """ alpha_generator(length, type)
+        if length = 1000 step이면, 
+        0 step ~ 1000 * 0.3 = 300 step까지는 alpha=1
+        300 step ~ 300 step 구간에서는 linear decay from 1 to 0
+        300 step ~ 1000 step까지는 alpha=0
+        """
         self.alpha_generator_func = alpha_generator_func
         self.set_alpha_scale = set_alpha_scale
 
@@ -32,12 +43,18 @@ class DDIMSampler(object):
                       ddim_num_steps,
                       ddim_discretize="uniform",
                       ddim_eta=0.):
+        """ self.ddim_timesteps
+ [  1   5   9  13  , ... , 985 989 993 997]
+ len(self.ddim_timesteps) = 250
+        alphas_cumprod: shape (ddpm_num_timesteps) (1000,)
+        """
         self.ddim_timesteps = make_ddim_timesteps(
             ddim_discr_method=ddim_discretize,
             num_ddim_timesteps=ddim_num_steps,
             num_ddpm_timesteps=self.ddpm_num_timesteps,
             verbose=False)
-        alphas_cumprod = self.diffusion.alphas_cumprod
+
+        alphas_cumprod = self.diffusion.alphas_cumprod # shape (ddpm_num_timesteps) (1000,)
         assert alphas_cumprod.shape[
             0] == self.ddpm_num_timesteps, 'alphas have to be defined for each timestep'
         to_torch = lambda x: x.clone().detach().to(torch.float32).to(self.device
@@ -71,10 +88,13 @@ class DDIMSampler(object):
                              to_torch(np.sqrt(1. / alphas_cumprod.cpu() - 1)))
 
         # ddim sampling parameters
+        """
+        ddim_sigmas, ddim_alphas, ddim_alphas_prev : shape (ddim_num_steps) (250,)
+        """
         ddim_sigmas, ddim_alphas, ddim_alphas_prev = make_ddim_sampling_parameters(
-            alphacums=alphas_cumprod.cpu(),
-            ddim_timesteps=self.ddim_timesteps,
-            eta=ddim_eta,
+            alphacums=alphas_cumprod.cpu(), # shape (ddpm_num_timesteps) (1000,)
+            ddim_timesteps=self.ddim_timesteps, # shape (ddim_num_steps) (250,)
+            eta=ddim_eta, # 0. -> DDIM deterministic sampling을 하겠다는 의미
             verbose=False)
         self.register_buffer('ddim_sigmas', ddim_sigmas)
         self.register_buffer('ddim_alphas', ddim_alphas)
@@ -96,6 +116,29 @@ class DDIMSampler(object):
                guidance_scale=1,
                mask=None,
                x0=None):
+        """
+    S = 250
+    shape: (config.batch_size, model.in_channels, model.image_size,
+         model.image_size) -> (1, 4, 64, 64)
+    input = dict(
+        x=starting_noise,
+            None
+        timesteps=None,
+        context=context,
+            (batch_size, 77, 768)
+        grounding_input=grounding_input, (DICT)
+            boxes: (batch_size, max_objs, 4)
+            masks: (batch_size, max_objs)
+            positive_embeddings: (batch_size, max_objs, 768)
+        inpainting_extra_input=inpainting_extra_input,
+        grounding_extra_input=grounding_extra_input,)
+    uc: (batch_size, 77, 768)
+        - args.negative_prompt 로 부터 생성
+'longbody, lowres, bad anatomy, bad hands, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality'
+    guidance_scale: config.guidance_scale = 7.5
+    mask: inpainting_mask = None
+    x0: z0 = None
+        """
         self.make_schedule(ddim_num_steps=S)
         return self.ddim_sampling(shape,
                                   input,
@@ -112,13 +155,41 @@ class DDIMSampler(object):
                       guidance_scale=1,
                       mask=None,
                       x0=None):
+        """
+    shape: (config.batch_size, model.in_channels, model.image_size,
+         model.image_size) -> (1, 4, 64, 64)
+    input = dict(
+        x=starting_noise,
+            None
+        timesteps=None,
+        context=context,
+            (batch_size, 77, 768)
+        grounding_input=grounding_input, (DICT)
+            boxes: (batch_size, max_objs, 4)
+            masks: (batch_size, max_objs)
+            positive_embeddings: (batch_size, max_objs, 768)
+        inpainting_extra_input=inpainting_extra_input,
+        grounding_extra_input=grounding_extra_input,)
+    uc: (batch_size, 77, 768)
+        - args.negative_prompt 로 부터 생성
+        - 'longbody, lowres, bad anatomy, bad hands, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality'
+    guidance_scale: config.guidance_scale = 7.5
+    mask: inpainting_mask = None
+    x0: z0 = None
+        """
         b = shape[0]
 
         img = input["x"]
         if img == None:
+            # 각 요소는 평균이 0이고 표준편차가 1인 정규분포에서 무작위로 선택된 값
+            # (batch_size, in_channels, image_size, image_size)
             img = torch.randn(shape, device=self.device)
             input["x"] = img
-
+        """
+self.ddim_timesteps
+ [  1   5   9  13  , ... , 985 989 993 997]
+ len(self.ddim_timesteps) = 250
+        """
         time_range = np.flip(self.ddim_timesteps)
         total_steps = self.ddim_timesteps.shape[0]
 
@@ -126,18 +197,25 @@ class DDIMSampler(object):
         iterator = time_range
 
         if self.alpha_generator_func != None:
+            """ alpha_generator(length, type)
+            if length = 250 step이면, 
+            0 step ~ 250 * 0.3 step까지는 alpha=1
+            250 * 0.3 step ~ 250 * 0.3 step 구간에서는 linear decay from 1 to 0
+            250 * 0.3 step ~ 250 step까지는 alpha=0
+            """
             alphas = self.alpha_generator_func(len(iterator))
 
         for i, step in enumerate(iterator):
 
             # set alpha
             if self.alpha_generator_func != None:
+                # self.model: ldm.modules.diffusionmodules.openaimodel.UNetModel
                 self.set_alpha_scale(self.model, alphas[i])
                 if alphas[i] == 0:
                     self.model.restore_first_conv_from_SD()
 
             # run
-            index = total_steps - i - 1
+            index = total_steps - i - 1 # 249, 248, ... 0
             input["timesteps"] = torch.full((b,),
                                             step,
                                             device=self.device,
@@ -159,7 +237,26 @@ class DDIMSampler(object):
 
     @torch.no_grad()
     def p_sample_ddim(self, input, index, uc=None, guidance_scale=1):
+        """
+    input = dict(
+        x=starting_noise,
+            None
+        timesteps= (batch_size) -> step 값으로 전부 채워짐
+        context=context,
+            (batch_size, 77, 768)
+        grounding_input=grounding_input, (DICT)
+            boxes: (batch_size, max_objs, 4)
+            masks: (batch_size, max_objs)
+            positive_embeddings: (batch_size, max_objs, 768)
+        inpainting_extra_input=inpainting_extra_input,
+        grounding_extra_input=grounding_extra_input,)
+    uc: (batch_size, 77, 768)
+        - args.negative_prompt 로 부터 생성
+        - 'longbody, lowres, bad anatomy, bad hands, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality'
+    guidance_scale: config.guidance_scale = 7.5
 
+        """
+        # self.model: ldm.modules.diffusionmodules.openaimodel.UNetModel
         e_t = self.model(input)
         if uc is not None and guidance_scale != 1:
             unconditional_input = dict(

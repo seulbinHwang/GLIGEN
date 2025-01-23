@@ -183,6 +183,10 @@ def complete_mask(has_mask, max_objs):
 
 @torch.no_grad()
 def prepare_batch(meta, batch=1, max_objs=30):
+    """meta
+         phrases=["road", "intersection"],
+         locations=[[0.45, 0.0, 0.55, 1.0], [0.0, 0.45, 1.0, 0.55]],
+    """
     phrases, images = meta.get("phrases"), meta.get("images")
     images = [None] * len(phrases) if images == None else images
     phrases = [None] * len(images) if phrases == None else phrases
@@ -208,7 +212,7 @@ def prepare_batch(meta, batch=1, max_objs=30):
 
     for idx, (box, text_feature, image_feature) in enumerate(
             zip(meta['locations'], text_features, image_features)):
-        boxes[idx] = torch.tensor(box)
+        boxes[idx] = torch.tensor(box) # shape: (4,)
         masks[idx] = 1
         if text_feature is not None:
             text_embeddings[idx] = text_feature
@@ -233,7 +237,14 @@ def prepare_batch(meta, batch=1, max_objs=30):
         "image_embeddings":
             image_embeddings.unsqueeze(0).repeat(batch, 1, 1)
     }
-
+    """
+    print("boxes", out["boxes"].shape) # (1, max_objs, 4)
+    print("masks", out["masks"].shape) # (1, max_objs)
+    print("text_masks", out["text_masks"].shape) # (1, max_objs)
+    print("image_masks", out["image_masks"].shape) # (1, max_objs)
+    print("text_embeddings", out["text_embeddings"].shape) # (1, max_objs, 768)
+    print("image_embeddings", out["image_embeddings"].shape) # (1, max_objs, 768)
+    """
     return batch_to_device(out, device)
 
 
@@ -394,9 +405,15 @@ def run(meta, config, starting_noise=None):
     """
     dataloader와 grounding_tokenizer 사이의 중간 class
     grounding_input/__init__.py 을 참조
+
+config['grounding_tokenizer_input']: 
+     {'target': 'grounding_input.text_grounding_tokinzer_input.GroundingNetInput'}
+grounding_tokenizer_input
+    <grounding_input.text_grounding_tokinzer_input.GroundingNetInput>
     """
     grounding_tokenizer_input = instantiate_from_config(
         config['grounding_tokenizer_input'])
+    # model: 'ldm.modules.diffusionmodules.openaimodel.UNetModel'
     model.grounding_tokenizer_input = grounding_tokenizer_input
 
     grounding_downsampler_input = None
@@ -422,15 +439,38 @@ def run(meta, config, starting_noise=None):
     elif "sem" in meta["ckpt"]:
         batch = prepare_batch_sem(meta, config.batch_size)
     else:
+        """meta
+             prompt: 
+ "A bird's-eye view of a complex road situation with high density of cars",
+             phrases=["road", "intersection"],
+             locations=[[0.45, 0.0, 0.55, 1.0], [0.0, 0.45, 1.0, 0.55]],
+             negative_prompt
+'longbody, lowres, bad anatomy, bad hands, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality'
+        """
+        """
+        print("boxes", out["boxes"].shape) # (1, max_objs, 4)
+        print("masks", out["masks"].shape) # (1, max_objs)
+        print("text_masks", out["text_masks"].shape) # (1, max_objs)
+        print("image_masks", out["image_masks"].shape) # (1, max_objs)
+        print("text_embeddings", out["text_embeddings"].shape) # (1, max_objs, 768)
+        print("image_embeddings", out["image_embeddings"].shape) # (1, max_objs, 768)
+        """
         batch = prepare_batch(meta, config.batch_size)
+    # context: (batch_size, 77, 768)
+    """
+77은 CLIP 모델에서 사용하는 텍스트 토큰의 최대 길이를 나타
+CLIP 모델은 입력 텍스트를 토큰화하여 고정된 길이의 시퀀스로 변환하며, 
+    이 경우 최대 77개의 토큰으로 변환
+    """
     context = text_encoder.encode([meta["prompt"]] * config.batch_size)
     uc = text_encoder.encode(config.batch_size * [""])
     if args.negative_prompt is not None:
+        # uc: (batch_size, 77, 768)
         uc = text_encoder.encode(config.batch_size * [args.negative_prompt])
 
     # - - - - - sampler - - - - - #
-    """
-    1000 step이면, 
+    """ alpha_generator(length, type)
+    if length = 1000 step이면, 
     0 step ~ 1000 * 0.3 = 300 step까지는 alpha=1
     300 step ~ 300 step 구간에서는 linear decay from 1 to 0
     300 step ~ 1000 step까지는 alpha=0
@@ -469,15 +509,25 @@ def run(meta, config, starting_noise=None):
         inpainting_extra_input = torch.cat([masked_z, inpainting_mask], dim=1)
 
     # - - - - - input for gligen - - - - - #
+    """grounding_tokenizer_input
+dataloader와 grounding_tokenizer 사이의 중간 class 입니다.
+grounding_input/__init__.py 을 참조하세요.
+
+grounding_input : Dict
+    boxes: (batch_size, max_objs, 4)
+    masks: (batch_size, max_objs)
+    positive_embeddings: (batch_size, max_objs, 768)
+    
+    """
     grounding_input = grounding_tokenizer_input.prepare(batch)
     grounding_extra_input = None
     if grounding_downsampler_input != None:
         grounding_extra_input = grounding_downsampler_input.prepare(batch)
 
     input = dict(
-        x=starting_noise,
+        x=starting_noise, # None
         timesteps=None,
-        context=context,
+        context=context, # (batch_size, 77, 768)
         grounding_input=grounding_input,
         inpainting_extra_input=inpainting_extra_input,
         grounding_extra_input=grounding_extra_input,
@@ -524,6 +574,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--no_plms",
         action='store_true',
+        default=True,
         help="use DDIM instead. WARNING: I did not test the code yet")
     parser.add_argument("--guidance_scale", type=float, default=7.5, help="")
     parser.add_argument(

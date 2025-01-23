@@ -276,6 +276,17 @@ class UNetModel(nn.Module):
         grounding_downsampler=None,
         grounding_tokenizer=None,
     ):
+        """
+{'image_size': 64, 'in_channels': 4, 'out_channels': 4,
+'model_channels': 320, 'attention_resolutions': [4, 2, 1],
+'num_res_blocks': 2, 'channel_mult': [1, 2, 4, 4],
+'num_heads': 8, 'transformer_depth': 1,
+'context_dim': 768, 'fuser_type': 'gatedSA', 'use_checkpoint': True,
+'grounding_tokenizer':
+    {'target': 'ldm.modules.diffusionmodules.text_grounding_net.PositionNet',
+    'params': {'in_dim': 768, 'out_dim': 768}}}}
+
+        """
         super().__init__()
 
         self.image_size = image_size
@@ -295,6 +306,12 @@ class UNetModel(nn.Module):
         assert fuser_type in ["gatedSA", "gatedSA2", "gatedCA"]
 
         self.grounding_tokenizer_input = None  # set externally
+        """
+config['grounding_tokenizer_input']: 
+     {'target': 'grounding_input.text_grounding_tokinzer_input.GroundingNetInput'}
+grounding_tokenizer_input
+    <grounding_input.text_grounding_tokinzer_input.GroundingNetInput>
+        """
 
         time_embed_dim = model_channels * 4
         self.time_embed = nn.Sequential(
@@ -318,9 +335,14 @@ class UNetModel(nn.Module):
             self.first_conv_restorable = False  # in inpaint; You must use extra channels to take in masked real image
         else:
             in_c = in_channels + self.additional_channel_from_downsampler
+        """
+        dims = 2
+        in_c = in_channels = 4
+        model_channels = 320
+        """
         self.input_blocks = nn.ModuleList([
             TimestepEmbedSequential(
-                conv_nd(dims, in_c, model_channels, 3, padding=1))
+                conv_nd(dims, in_c, model_channels, 3, padding=1)) # 3: kernel_size ,
         ])
 
         input_block_chans = [model_channels]
@@ -446,17 +468,40 @@ class UNetModel(nn.Module):
             zero_module(
                 conv_nd(dims, model_channels, out_channels, 3, padding=1)),
         )
-
+        """
+'grounding_tokenizer':
+    {'target': 'ldm.modules.diffusionmodules.text_grounding_net.PositionNet',
+    'params': {'in_dim': 768, 'out_dim': 768}}}}
+        """
         self.position_net = instantiate_from_config(grounding_tokenizer)
 
     def restore_first_conv_from_SD(self):
+        """
+`restore_first_conv_from_SD` 함수는 `UNetModel` 클래스의 첫 번째 컨볼루션 레이어를 "SD" (Stable Diffusion) 모델의 가중치로 복원하는 역할을 합니다. 이 함수는 다음과 같은 작업을 수행합니다:
+
+1. `first_conv_restorable` 속성이 `True`인지 확인합니다.
+2. 첫 번째 컨볼루션 레이어의 장치를 가져옵니다.
+3. "SD_input_conv_weight_bias.pth" 파일에서 Stable Diffusion 모델의 가중치를 로드합니다.
+4. 현재 첫 번째 컨볼루션 레이어의 상태를 `GLIGEN_first_conv_state_dict`에 백업합니다.
+5. 첫 번째 컨볼루션 레이어를 새로운 `conv_nd` 레이어로 교체하고, 로드한 가중치를 적용합니다.
+6. 새로운 레이어를 원래 장치로 이동시킵니다.
+7. `first_conv_type` 속성을 "SD"로 설정합니다.
+
+만약 `first_conv_restorable` 속성이 `False`인 경우, 해당 레이어가 복원 불가능하다는 메시지를 출력합니다.
+
+        """
         if self.first_conv_restorable:
             device = self.input_blocks[0][0].weight.device
 
             SD_weights = th.load("SD_input_conv_weight_bias.pth")
             self.GLIGEN_first_conv_state_dict = deepcopy(
                 self.input_blocks[0][0].state_dict())
-
+            """
+            nn.Conv2d
+                in_c = 4
+                out_c = 320
+                kernel_size = 3 
+            """
             self.input_blocks[0][0] = conv_nd(2, 4, 320, 3, padding=1)
             self.input_blocks[0][0].load_state_dict(SD_weights)
             self.input_blocks[0][0].to(device)
@@ -471,23 +516,43 @@ class UNetModel(nn.Module):
         breakpoint()  # TODO
 
     def forward(self, input):
+        """
+    input = dict(
+        x=starting_noise,grounding_input
+            None
+        timesteps=(batch_size) -> step 값으로 전부 채워짐,
+        context=context,
+            (batch_size, 77, 768)
+        grounding_input=grounding_input, (DICT)
+            boxes: (batch_size, max_objs, 4)
+            masks: (batch_size, max_objs)
+            positive_embeddings: (batch_size, max_objs, 768)
+        inpainting_extra_input=inpainting_extra_input,
+        grounding_extra_input=grounding_extra_input,)
 
+        """
         if ("grounding_input" in input):
             grounding_input = input["grounding_input"]
         else:
             # Guidance null case
+            """
+    config['grounding_tokenizer_input']: 
+         {'target': 'grounding_input.text_grounding_tokinzer_input.GroundingNetInput'}
+    grounding_tokenizer_input
+        <grounding_input.text_grounding_tokinzer_input.GroundingNetInput>
+            """
             grounding_input = self.grounding_tokenizer_input.get_null_input()
 
         if self.training and random.random(
         ) < 0.1 and self.grounding_tokenizer_input.set:  # random drop for guidance
             grounding_input = self.grounding_tokenizer_input.get_null_input()
-
         # Grounding tokens: B*N*C
-        objs = self.position_net(**grounding_input)
+        objs = self.position_net(**grounding_input) # (B, max_objs, out_dim)
 
         # Time embedding
-        t_emb = timestep_embedding(input["timesteps"],
-                                   self.model_channels,
+        # TODO: 여기서부터!
+        t_emb = timestep_embedding(input["timesteps"], # (batch_size) -> step 값으로 전부 채워짐
+                                   self.model_channels, # 320
                                    repeat_only=False)
         emb = self.time_embed(t_emb)
 

@@ -8,6 +8,7 @@ import logging
 try:
     from .blob_storage import BlobStorage, disk_usage
 except:
+
     class BlobStorage:
         pass
 
@@ -30,7 +31,7 @@ def read_to_character(fp, c):
         s = fp.read(32)
         assert s != ''
         if c in s:
-            result.append(s[: s.index(c)])
+            result.append(s[:s.index(c)])
             break
         else:
             result.append(s)
@@ -38,6 +39,7 @@ def read_to_character(fp, c):
 
 
 class TSVFile(object):
+
     def __init__(self,
                  tsv_file: str,
                  if_generate_lineidx: bool = False,
@@ -68,12 +70,14 @@ class TSVFile(object):
         if self._fp:
             self._fp.close()
             # physically remove the tsv file if it is retrieved by BlobStorage
-            if self._blob_storage and 'azcopy' in self.tsv_file and os.path.exists(self.tsv_file):
+            if self._blob_storage and 'azcopy' in self.tsv_file and os.path.exists(
+                    self.tsv_file):
                 try:
                     original_usage = disk_usage('/')
                     os.remove(self.tsv_file)
-                    logging.info("Purged %s (disk usage: %.2f%% => %.2f%%)" %
-                                 (self.tsv_file, original_usage, disk_usage('/') * 100))
+                    logging.info(
+                        "Purged %s (disk usage: %.2f%% => %.2f%%)" %
+                        (self.tsv_file, original_usage, disk_usage('/') * 100))
                 except:
                     # Known issue: multiple threads attempting to delete the file will raise a FileNotFound error.
                     # TODO: try Threadling.Lock to better handle the race condition
@@ -147,11 +151,7 @@ class TSVFile(object):
             if op.isfile(self.linelist):
                 with open(self.linelist, 'r') as fp:
                     linelist = sorted(
-                        [
-                            int(line.strip())
-                            for line in fp.readlines()
-                        ]
-                    )
+                        [int(line.strip()) for line in fp.readlines()])
 
             if op.isfile(self.chunks):
                 self._sample_indices = []
@@ -182,12 +182,14 @@ class TSVFile(object):
             self.pid = os.getpid()
 
         if self.pid != os.getpid():
-            logging.debug('=> re-open {} because the process id changed'.format(self.tsv_file))
+            logging.debug('=> re-open {} because the process id changed'.format(
+                self.tsv_file))
             self._fp = open(self.tsv_file, 'r')
             self.pid = os.getpid()
 
 
 class TSVWriter(object):
+
     def __init__(self, tsv_file):
         self.tsv_file = tsv_file
         self.lineidx_file = op.splitext(tsv_file)[0] + '.lineidx'

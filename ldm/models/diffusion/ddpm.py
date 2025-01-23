@@ -13,9 +13,12 @@ class DDPM(nn.Module):
                  linear_start=1e-4,
                  linear_end=2e-2,
                  cosine_s=8e-3):
+        """
+    {'linear_start': 0.00085, 'linear_end': 0.012, 'timesteps': 1000}
+        """
         super().__init__()
 
-        self.v_posterior = 0 # Improved DDPM에서 학습의 output 중 하나.
+        self.v_posterior = 0 # Improved DDPM에서 학습의 output 중 하나. (분산 구하기 위한)
         self.register_schedule(beta_schedule, timesteps, linear_start,
                                linear_end, cosine_s)
 

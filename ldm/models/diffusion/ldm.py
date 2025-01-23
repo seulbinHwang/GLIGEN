@@ -8,7 +8,9 @@ from .ddpm import DDPM
 
 
 class LatentDiffusion(DDPM):
-
+    """
+{'linear_start': 0.00085, 'linear_end': 0.012, 'timesteps': 1000}
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # hardcoded
