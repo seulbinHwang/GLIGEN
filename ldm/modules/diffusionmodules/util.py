@@ -190,12 +190,8 @@ def timestep_embedding(timesteps, dim, max_period=10000, repeat_only=False):
         (batch_size) -> step 값으로 전부 채워짐
     :param dim: the dimension of the output.
     :param max_period: controls the minimum frequency of the embeddings.
-max_period 변수는 임베딩의 최소 주파수를 제어
-이 변수는 주파수의 범위를 설정하여, 주파수가 너무 작거나 너무 커지는 것을 방지
-이를 통해 임베딩이 적절한 주파수 범위 내에서 생성되도록 합니다.
     :return: an [N x dim] Tensor of positional embeddings.
     """
-    # TODO:
     if not repeat_only:
         half = dim // 2
         freqs = torch.exp(-math.log(max_period) *

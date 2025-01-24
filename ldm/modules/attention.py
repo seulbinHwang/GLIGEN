@@ -355,7 +355,29 @@ class BasicTransformerBlock(nn.Module):
         self.norm2 = nn.LayerNorm(query_dim)
         self.norm3 = nn.LayerNorm(query_dim)
         self.use_checkpoint = use_checkpoint
+        """
+`fuser_type`에 따라 Attention 구조가 달라지는 방식은 다음과 같습니다:
 
+1. **gatedSA (Gated Self-Attention)**:
+    - **GatedSelfAttentionDense** 클래스 사용.
+    - Self-Attention 메커니즘을 사용하여 입력과 객체 특징을 결합.
+    - 입력과 객체 특징을 결합한 후, 이를 다시 Self-Attention을 통해 처리.
+    - Residual 연결을 통해 원래 입력에 결합된 특징을 추가.
+
+2. **gatedSA2 (Gated Self-Attention 2)**:
+    - **GatedSelfAttentionDense2** 클래스 사용.
+    - Self-Attention 메커니즘을 사용하여 입력과 객체 특징을 결합.
+    - 객체 특징을 시각적 특징 크기에 맞게 보간하여 Residual로 추가.
+    - Residual 연결을 통해 원래 입력에 결합된 특징을 추가.
+
+3. **gatedCA (Gated Cross-Attention)**:
+    - **GatedCrossAttentionDense** 클래스 사용.
+    - Cross-Attention 메커니즘을 사용하여 입력과 객체 특징을 결합.
+    - Query, Key, Value를 사용하여 입력과 객체 특징 간의 상호작용을 계산.
+    - Residual 연결을 통해 원래 입력에 결합된 특징을 추가.
+
+이러한 구조는 Attention 메커니즘을 통해 입력과 객체 특징을 결합하여 더 풍부한 표현을 학습할 수 있도록 합니다.
+        """
         if fuser_type == "gatedSA":
             # note key_dim here actually is context_dim
             self.fuser = GatedSelfAttentionDense(query_dim, key_dim, n_heads,
@@ -378,6 +400,12 @@ class BasicTransformerBlock(nn.Module):
             return self._forward(x, context, objs)
 
     def _forward(self, x, context, objs):
+        """
+        x: (B, N, C)
+        context: (B, N_text, C_out)
+        objs: (B, N_obj, C_out)
+        """
+        # TODO:
         x = self.attn1(self.norm1(x)) + x
         x = self.fuser(x, objs)  # identity mapping in the beginning
         x = self.attn2(self.norm2(x), context, context) + x
@@ -389,12 +417,12 @@ class SpatialTransformer(nn.Module):
 
     def __init__(self,
                  in_channels,
-                 key_dim,
-                 value_dim,
+                 key_dim, # context_dim
+                 value_dim, # context_dim
                  n_heads,
-                 d_head,
+                 d_head, #  in_channels // n_heads
                  depth=1,
-                 fuser_type=None,
+                 fuser_type=None, # gatedSA
                  use_checkpoint=True):
         super().__init__()
         self.in_channels = in_channels
@@ -426,13 +454,29 @@ class SpatialTransformer(nn.Module):
                       padding=0))
 
     def forward(self, x, context, objs):
+        """
+        x: (B, C, H, W)
+        context: (B, max_words, C)
+        objs: (B, max_objs, C_out)
+        """
         b, c, h, w = x.shape
+        print("===================")
+        print("x.shape", x.shape)
         x_in = x
-        x = self.norm(x)
-        x = self.proj_in(x)
-        x = rearrange(x, 'b c h w -> b (h w) c')
-        for block in self.transformer_blocks:
+        x = self.norm(x) # ( b, c, h, w) -> (b, c, h, w)
+        print("x.shape", x.shape)
+        x = self.proj_in(x) # ( b, c, h, w) -> (b, c, h, w)
+        print("x.shape", x.shape)
+        x = rearrange(x, 'b c h w -> b (h w) c') # (b, c, h, w) -> (b, h*w, c)
+        print("x.shape", x.shape)
+        for idx, block in enumerate(self.transformer_blocks):
+            """
+            x: (b, h*w, c)
+            context: (b, max_words, c)
+            objs: (b, max_objs, c_out
+            """
             x = block(x, context, objs)
-        x = rearrange(x, 'b (h w) c -> b c h w', h=h, w=w)
-        x = self.proj_out(x)
+            # x : (b, h*w, c)
+        x = rearrange(x, 'b (h w) c -> b c h w', h=h, w=w) # (b, h*w, c) -> (b, c, h, w)
+        x = self.proj_out(x) # (b, c, h, w) -> (b, c, h, w)
         return x + x_in

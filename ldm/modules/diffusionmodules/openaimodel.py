@@ -146,12 +146,12 @@ class ResBlock(TimestepBlock):
 
     def __init__(
         self,
-        channels,
-        emb_channels,
-        dropout,
-        out_channels=None,
+        channels, # model_channels = 320
+        emb_channels, # model_channels * 4
+        dropout, # 0
+        out_channels=None, # mult * model_channels
         use_conv=False,
-        use_scale_shift_norm=False,
+        use_scale_shift_norm=False, # False
         dims=2,
         use_checkpoint=False,
         up=False,
@@ -249,7 +249,8 @@ class ResBlock(TimestepBlock):
         else:
             h = h + emb_out
             h = self.out_layers(h)
-        return self.skip_connection(x) + h
+        return_ = self.skip_connection(x) + h
+        return return_
 
 
 class UNetModel(nn.Module):
@@ -350,32 +351,34 @@ grounding_tokenizer_input
         ds = 1
 
         # = = = = = = = = = = = = = = = = = = = = Down Branch = = = = = = = = = = = = = = = = = = = = #
-        for level, mult in enumerate(channel_mult):
-            for _ in range(num_res_blocks):
+        for level, mult in enumerate(channel_mult): # channel_mult: [1, 2, 4, 4]
+            for _ in range(num_res_blocks): # 2
                 layers = [
                     ResBlock(
-                        ch,
-                        time_embed_dim,
-                        dropout,
+                        ch, # model_channels = 320
+                        time_embed_dim, # model_channels * 4
+                        dropout, # 0
                         out_channels=mult * model_channels,
-                        dims=dims,
-                        use_checkpoint=use_checkpoint,
-                        use_scale_shift_norm=use_scale_shift_norm,
+                        dims=dims, # 2
+                        use_checkpoint=use_checkpoint, # True
+                        use_scale_shift_norm=use_scale_shift_norm, # False
                     )
                 ]
 
                 ch = mult * model_channels
-                if ds in attention_resolutions:
-                    dim_head = ch // num_heads
+                # ds: 1 -> 2 -> 4 ->  8
+                if ds in attention_resolutions: # attention_resolutions:[4, 2, 1]
+                    dim_head = ch // num_heads # num_heads: 8
                     layers.append(
-                        SpatialTransformer(ch,
-                                           key_dim=context_dim,
-                                           value_dim=context_dim,
-                                           n_heads=num_heads,
-                                           d_head=dim_head,
-                                           depth=transformer_depth,
-                                           fuser_type=fuser_type,
-                                           use_checkpoint=use_checkpoint))
+                        SpatialTransformer(ch, # mult * model_channels
+                                           key_dim=context_dim, # 768
+                                           value_dim=context_dim, # 768
+                                           n_heads=num_heads, # 8
+                                           d_head=dim_head, # ( ch // num_heads )
+                                           depth=transformer_depth, # 1
+                                           fuser_type=fuser_type, # gatedSA
+                                           use_checkpoint=use_checkpoint) # True
+                    )
 
                 self.input_blocks.append(TimestepEmbedSequential(*layers))
                 input_block_chans.append(ch)
@@ -387,8 +390,8 @@ grounding_tokenizer_input
                 self.input_blocks.append(
                     TimestepEmbedSequential(
                         Downsample(ch,
-                                   conv_resample,
-                                   dims=dims,
+                                   conv_resample, # True
+                                   dims=dims, # 2
                                    out_channels=out_ch)))
                 ch = out_ch
                 input_block_chans.append(ch)
@@ -460,6 +463,8 @@ grounding_tokenizer_input
 
                 self.output_blocks.append(TimestepEmbedSequential(*layers))
 
+        # self.input_blocks = [ C |  RT  RT  D  |  RT  RT  D  |  RT  RT  D  |   R  R   ]
+        # self.middle_block = [ RTR ]
         # self.output_blocks = [ R  R  RU | RT  RT  RTU |  RT  RT  RTU  |  RT  RT  RT  ]
 
         self.out = nn.Sequential(
@@ -550,14 +555,19 @@ grounding_tokenizer_input
         objs = self.position_net(**grounding_input) # (B, max_objs, out_dim)
 
         # Time embedding
-        # TODO: 여기서부터!
+        # t_emb = (N, model_channels)
         t_emb = timestep_embedding(input["timesteps"], # (batch_size) -> step 값으로 전부 채워짐
                                    self.model_channels, # 320
                                    repeat_only=False)
+        # emb: (N , time_embed_dim = 4 * model_channels)
         emb = self.time_embed(t_emb)
 
         # input tensor
         h = input["x"]
+        """
+            # 각 요소는 평균이 0이고 표준편차가 1인 정규분포에서 무작위로 선택된 값
+            # (batch_size, in_channels, image_size, image_size) = ( b, 4, 64, 64)
+        """
         if self.downsample_net != None and self.first_conv_type == "GLIGEN":
             temp = self.downsample_net(input["grounding_extra_input"])
             h = th.cat([h, temp], dim=1)
@@ -567,13 +577,31 @@ grounding_tokenizer_input
             h = th.cat([h, input["inpainting_extra_input"]], dim=1)
 
         # Text input
-        context = input["context"]
+        # TODO: 여기서부터
+        context = input["context"] # (batch_size, 77, 768)
+        # 77은 CLIP 모델에서 사용하는 텍스트 토큰의 최대 길이를 나타냄
+        # CLIP 모델은 입력 텍스트를 토큰화하여 고정된 길이의 시퀀스로 변환하며,
+        #     이 경우 최대 77개의 토큰으로 변환
 
         # Start forwarding
         hs = []
-        for module in self.input_blocks:
+        # # self.input_blocks = [ C |  RT  RT  D  |  RT  RT  D  |  RT  RT  D  |   R  R   ]
+        for idx, module in enumerate(self.input_blocks):
+            """
+            h : (batch_size, in_channels, image_size, image_size)
+            emb : (N , time_embed_dim = 4 * model_channels)
+            context : (batch_size, 77, 768)
+            objs : (B, max_objs, out_dim)
+            """
+            print(f"------------{idx}-----------")
+            print("h.shape: ", h.shape)
+            print("emb.shape: ", emb.shape)
+            print("context.shape: ", context.shape)
+            print("objs.shape: ", objs.shape)
             h = module(h, emb, context, objs)
+            print("h.shape: ", h.shape)
             hs.append(h)
+        raise NotImplementedError
 
         h = self.middle_block(h, emb, context, objs)
 

@@ -223,6 +223,14 @@ self.ddim_timesteps
 
             if mask is not None:
                 assert x0 is not None
+                """
+                x0
+                    # 각 요소는 평균이 0이고 표준편차가 1인 정규분포에서 무작위로 선택된 값
+                    # (batch_size, in_channels, image_size, image_size)
+                input["timesteps}]
+                    # (batch_size)
+                """
+                #  'ldm.models.diffusion.ldm.LatentDiffusion'
                 img_orig = self.diffusion.q_sample(x0, input["timesteps"])
                 img = img_orig * mask + (1. - mask) * img
                 input["x"] = img
@@ -240,7 +248,8 @@ self.ddim_timesteps
         """
     input = dict(
         x=starting_noise,
-            None
+            # 각 요소는 평균이 0이고 표준편차가 1인 정규분포에서 무작위로 선택된 값
+            # (batch_size, in_channels, image_size, image_size)
         timesteps= (batch_size) -> step 값으로 전부 채워짐
         context=context,
             (batch_size, 77, 768)
