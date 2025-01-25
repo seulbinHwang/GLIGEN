@@ -22,7 +22,268 @@ from torch.utils import checkpoint
 from ldm.util import instantiate_from_config
 from copy import deepcopy
 
-
+"""
+------------input_blocks0-----------
+h.shape:  torch.Size([1, 4, 64, 64]) emb.shape:  torch.Size([1, 1280]) context.shape:  torch.Size([1, 77, 768]) objs.shape:  torch.Size([1, 30, 768])
+h.shape:  torch.Size([1, 320, 64, 64])
+------------input_blocks1-----------
+h.shape:  torch.Size([1, 320, 64, 64]) emb.shape:  torch.Size([1, 1280]) context.shape:  torch.Size([1, 77, 768]) objs.shape:  torch.Size([1, 30, 768])
+===================
+x.shape torch.Size([1, 320, 64, 64])
+x.shape torch.Size([1, 320, 64, 64])
+x.shape torch.Size([1, 320, 64, 64])
+x.shape torch.Size([1, 4096, 320])
+h.shape:  torch.Size([1, 320, 64, 64])
+------------input_blocks2-----------
+h.shape:  torch.Size([1, 320, 64, 64]) emb.shape:  torch.Size([1, 1280]) context.shape:  torch.Size([1, 77, 768]) objs.shape:  torch.Size([1, 30, 768])
+===================
+x.shape torch.Size([1, 320, 64, 64])
+x.shape torch.Size([1, 320, 64, 64])
+x.shape torch.Size([1, 320, 64, 64])
+x.shape torch.Size([1, 4096, 320])
+h.shape:  torch.Size([1, 320, 64, 64])
+------------input_blocks3-----------
+h.shape:  torch.Size([1, 320, 64, 64]) emb.shape:  torch.Size([1, 1280]) context.shape:  torch.Size([1, 77, 768]) objs.shape:  torch.Size([1, 30, 768])
+h.shape:  torch.Size([1, 320, 32, 32])
+------------input_blocks4-----------
+h.shape:  torch.Size([1, 320, 32, 32]) emb.shape:  torch.Size([1, 1280]) context.shape:  torch.Size([1, 77, 768]) objs.shape:  torch.Size([1, 30, 768])
+===================
+x.shape torch.Size([1, 640, 32, 32])
+x.shape torch.Size([1, 640, 32, 32])
+x.shape torch.Size([1, 640, 32, 32])
+x.shape torch.Size([1, 1024, 640])
+h.shape:  torch.Size([1, 640, 32, 32])
+------------input_blocks5-----------
+h.shape:  torch.Size([1, 640, 32, 32]) emb.shape:  torch.Size([1, 1280]) context.shape:  torch.Size([1, 77, 768]) objs.shape:  torch.Size([1, 30, 768])
+===================
+x.shape torch.Size([1, 640, 32, 32])
+x.shape torch.Size([1, 640, 32, 32])
+x.shape torch.Size([1, 640, 32, 32])
+x.shape torch.Size([1, 1024, 640])
+h.shape:  torch.Size([1, 640, 32, 32])
+------------input_blocks6-----------
+h.shape:  torch.Size([1, 640, 32, 32]) emb.shape:  torch.Size([1, 1280]) context.shape:  torch.Size([1, 77, 768]) objs.shape:  torch.Size([1, 30, 768])
+h.shape:  torch.Size([1, 640, 16, 16])
+------------input_blocks7-----------
+h.shape:  torch.Size([1, 640, 16, 16]) emb.shape:  torch.Size([1, 1280]) context.shape:  torch.Size([1, 77, 768]) objs.shape:  torch.Size([1, 30, 768])
+===================
+x.shape torch.Size([1, 1280, 16, 16])
+x.shape torch.Size([1, 1280, 16, 16])
+x.shape torch.Size([1, 1280, 16, 16])
+x.shape torch.Size([1, 256, 1280])
+h.shape:  torch.Size([1, 1280, 16, 16])
+------------input_blocks8-----------
+h.shape:  torch.Size([1, 1280, 16, 16]) emb.shape:  torch.Size([1, 1280]) context.shape:  torch.Size([1, 77, 768]) objs.shape:  torch.Size([1, 30, 768])
+===================
+x.shape torch.Size([1, 1280, 16, 16])
+x.shape torch.Size([1, 1280, 16, 16])
+x.shape torch.Size([1, 1280, 16, 16])
+x.shape torch.Size([1, 256, 1280])
+h.shape:  torch.Size([1, 1280, 16, 16])
+------------input_blocks9-----------
+h.shape:  torch.Size([1, 1280, 16, 16]) emb.shape:  torch.Size([1, 1280]) context.shape:  torch.Size([1, 77, 768]) objs.shape:  torch.Size([1, 30, 768])
+h.shape:  torch.Size([1, 1280, 8, 8])
+------------input_blocks10-----------
+h.shape:  torch.Size([1, 1280, 8, 8]) emb.shape:  torch.Size([1, 1280]) context.shape:  torch.Size([1, 77, 768]) objs.shape:  torch.Size([1, 30, 768])
+h.shape:  torch.Size([1, 1280, 8, 8])
+------------input_blocks11-----------
+h.shape:  torch.Size([1, 1280, 8, 8]) emb.shape:  torch.Size([1, 1280]) context.shape:  torch.Size([1, 77, 768]) objs.shape:  torch.Size([1, 30, 768])
+h.shape:  torch.Size([1, 1280, 8, 8])
+------------middle_block-----------
+h.shape:  torch.Size([1, 1280, 8, 8]) emb.shape:  torch.Size([1, 1280]) context.shape:  torch.Size([1, 77, 768]) objs.shape:  torch.Size([1, 30, 768])
+===================
+x.shape torch.Size([1, 1280, 8, 8])
+x.shape torch.Size([1, 1280, 8, 8])
+x.shape torch.Size([1, 1280, 8, 8])
+x.shape torch.Size([1, 64, 1280])
+h.shape:  torch.Size([1, 1280, 8, 8])
+------------output_blocks0-----------
+h.shape:  torch.Size([1, 1280, 8, 8])
+h_.shape:  torch.Size([1, 1280, 8, 8])
+h_.shape:  torch.Size([1, 1280, 8, 8])
+h_.shape:  torch.Size([1, 1280, 8, 8])
+h_.shape:  torch.Size([1, 1280, 16, 16])
+h_.shape:  torch.Size([1, 1280, 16, 16])
+h_.shape:  torch.Size([1, 640, 16, 16])
+h_.shape:  torch.Size([1, 640, 32, 32])
+h_.shape:  torch.Size([1, 640, 32, 32])
+h_.shape:  torch.Size([1, 320, 32, 32])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h.shape:  torch.Size([1, 2560, 8, 8])
+h.shape:  torch.Size([1, 2560, 8, 8]) emb.shape:  torch.Size([1, 1280]) context.shape:  torch.Size([1, 77, 768]) objs.shape:  torch.Size([1, 30, 768])
+h.shape:  torch.Size([1, 1280, 8, 8])
+------------output_blocks1-----------
+h.shape:  torch.Size([1, 1280, 8, 8])
+h_.shape:  torch.Size([1, 1280, 8, 8])
+h_.shape:  torch.Size([1, 1280, 8, 8])
+h_.shape:  torch.Size([1, 1280, 16, 16])
+h_.shape:  torch.Size([1, 1280, 16, 16])
+h_.shape:  torch.Size([1, 640, 16, 16])
+h_.shape:  torch.Size([1, 640, 32, 32])
+h_.shape:  torch.Size([1, 640, 32, 32])
+h_.shape:  torch.Size([1, 320, 32, 32])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h.shape:  torch.Size([1, 2560, 8, 8])
+h.shape:  torch.Size([1, 2560, 8, 8]) emb.shape:  torch.Size([1, 1280]) context.shape:  torch.Size([1, 77, 768]) objs.shape:  torch.Size([1, 30, 768])
+h.shape:  torch.Size([1, 1280, 8, 8])
+------------output_blocks2-----------
+h.shape:  torch.Size([1, 1280, 8, 8])
+h_.shape:  torch.Size([1, 1280, 8, 8])
+h_.shape:  torch.Size([1, 1280, 16, 16])
+h_.shape:  torch.Size([1, 1280, 16, 16])
+h_.shape:  torch.Size([1, 640, 16, 16])
+h_.shape:  torch.Size([1, 640, 32, 32])
+h_.shape:  torch.Size([1, 640, 32, 32])
+h_.shape:  torch.Size([1, 320, 32, 32])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h.shape:  torch.Size([1, 2560, 8, 8])
+h.shape:  torch.Size([1, 2560, 8, 8]) emb.shape:  torch.Size([1, 1280]) context.shape:  torch.Size([1, 77, 768]) objs.shape:  torch.Size([1, 30, 768])
+h.shape:  torch.Size([1, 1280, 16, 16])
+------------output_blocks3-----------
+h.shape:  torch.Size([1, 1280, 16, 16])
+h_.shape:  torch.Size([1, 1280, 16, 16])
+h_.shape:  torch.Size([1, 1280, 16, 16])
+h_.shape:  torch.Size([1, 640, 16, 16])
+h_.shape:  torch.Size([1, 640, 32, 32])
+h_.shape:  torch.Size([1, 640, 32, 32])
+h_.shape:  torch.Size([1, 320, 32, 32])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h.shape:  torch.Size([1, 2560, 16, 16])
+h.shape:  torch.Size([1, 2560, 16, 16]) emb.shape:  torch.Size([1, 1280]) context.shape:  torch.Size([1, 77, 768]) objs.shape:  torch.Size([1, 30, 768])
+===================
+x.shape torch.Size([1, 1280, 16, 16])
+x.shape torch.Size([1, 1280, 16, 16])
+x.shape torch.Size([1, 1280, 16, 16])
+x.shape torch.Size([1, 256, 1280])
+h.shape:  torch.Size([1, 1280, 16, 16])
+------------output_blocks4-----------
+h.shape:  torch.Size([1, 1280, 16, 16])
+h_.shape:  torch.Size([1, 1280, 16, 16])
+h_.shape:  torch.Size([1, 640, 16, 16])
+h_.shape:  torch.Size([1, 640, 32, 32])
+h_.shape:  torch.Size([1, 640, 32, 32])
+h_.shape:  torch.Size([1, 320, 32, 32])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h.shape:  torch.Size([1, 2560, 16, 16])
+h.shape:  torch.Size([1, 2560, 16, 16]) emb.shape:  torch.Size([1, 1280]) context.shape:  torch.Size([1, 77, 768]) objs.shape:  torch.Size([1, 30, 768])
+===================
+x.shape torch.Size([1, 1280, 16, 16])
+x.shape torch.Size([1, 1280, 16, 16])
+x.shape torch.Size([1, 1280, 16, 16])
+x.shape torch.Size([1, 256, 1280])
+h.shape:  torch.Size([1, 1280, 16, 16])
+------------output_blocks5-----------
+h.shape:  torch.Size([1, 1280, 16, 16])
+h_.shape:  torch.Size([1, 640, 16, 16])
+h_.shape:  torch.Size([1, 640, 32, 32])
+h_.shape:  torch.Size([1, 640, 32, 32])
+h_.shape:  torch.Size([1, 320, 32, 32])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h.shape:  torch.Size([1, 1920, 16, 16])
+h.shape:  torch.Size([1, 1920, 16, 16]) emb.shape:  torch.Size([1, 1280]) context.shape:  torch.Size([1, 77, 768]) objs.shape:  torch.Size([1, 30, 768])
+===================
+x.shape torch.Size([1, 1280, 16, 16])
+x.shape torch.Size([1, 1280, 16, 16])
+x.shape torch.Size([1, 1280, 16, 16])
+x.shape torch.Size([1, 256, 1280])
+h.shape:  torch.Size([1, 1280, 32, 32])
+------------output_blocks6-----------
+h.shape:  torch.Size([1, 1280, 32, 32])
+h_.shape:  torch.Size([1, 640, 32, 32])
+h_.shape:  torch.Size([1, 640, 32, 32])
+h_.shape:  torch.Size([1, 320, 32, 32])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h.shape:  torch.Size([1, 1920, 32, 32])
+h.shape:  torch.Size([1, 1920, 32, 32]) emb.shape:  torch.Size([1, 1280]) context.shape:  torch.Size([1, 77, 768]) objs.shape:  torch.Size([1, 30, 768])
+===================
+x.shape torch.Size([1, 640, 32, 32])
+x.shape torch.Size([1, 640, 32, 32])
+x.shape torch.Size([1, 640, 32, 32])
+x.shape torch.Size([1, 1024, 640])
+h.shape:  torch.Size([1, 640, 32, 32])
+------------output_blocks7-----------
+h.shape:  torch.Size([1, 640, 32, 32])
+h_.shape:  torch.Size([1, 640, 32, 32])
+h_.shape:  torch.Size([1, 320, 32, 32])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h.shape:  torch.Size([1, 1280, 32, 32])
+h.shape:  torch.Size([1, 1280, 32, 32]) emb.shape:  torch.Size([1, 1280]) context.shape:  torch.Size([1, 77, 768]) objs.shape:  torch.Size([1, 30, 768])
+===================
+x.shape torch.Size([1, 640, 32, 32])
+x.shape torch.Size([1, 640, 32, 32])
+x.shape torch.Size([1, 640, 32, 32])
+x.shape torch.Size([1, 1024, 640])
+h.shape:  torch.Size([1, 640, 32, 32])
+------------output_blocks8-----------
+h.shape:  torch.Size([1, 640, 32, 32])
+h_.shape:  torch.Size([1, 320, 32, 32])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h.shape:  torch.Size([1, 960, 32, 32])
+h.shape:  torch.Size([1, 960, 32, 32]) emb.shape:  torch.Size([1, 1280]) context.shape:  torch.Size([1, 77, 768]) objs.shape:  torch.Size([1, 30, 768])
+===================
+x.shape torch.Size([1, 640, 32, 32])
+x.shape torch.Size([1, 640, 32, 32])
+x.shape torch.Size([1, 640, 32, 32])
+x.shape torch.Size([1, 1024, 640])
+h.shape:  torch.Size([1, 640, 64, 64])
+------------output_blocks9-----------
+h.shape:  torch.Size([1, 640, 64, 64])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h.shape:  torch.Size([1, 960, 64, 64])
+h.shape:  torch.Size([1, 960, 64, 64]) emb.shape:  torch.Size([1, 1280]) context.shape:  torch.Size([1, 77, 768]) objs.shape:  torch.Size([1, 30, 768])
+===================
+x.shape torch.Size([1, 320, 64, 64])
+x.shape torch.Size([1, 320, 64, 64])
+x.shape torch.Size([1, 320, 64, 64])
+x.shape torch.Size([1, 4096, 320])
+h.shape:  torch.Size([1, 320, 64, 64])
+------------output_blocks10-----------
+h.shape:  torch.Size([1, 320, 64, 64])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h.shape:  torch.Size([1, 640, 64, 64])
+h.shape:  torch.Size([1, 640, 64, 64]) emb.shape:  torch.Size([1, 1280]) context.shape:  torch.Size([1, 77, 768]) objs.shape:  torch.Size([1, 30, 768])
+===================
+x.shape torch.Size([1, 320, 64, 64])
+x.shape torch.Size([1, 320, 64, 64])
+x.shape torch.Size([1, 320, 64, 64])
+x.shape torch.Size([1, 4096, 320])
+h.shape:  torch.Size([1, 320, 64, 64])
+------------output_blocks11-----------
+h.shape:  torch.Size([1, 320, 64, 64])
+h_.shape:  torch.Size([1, 320, 64, 64])
+h.shape:  torch.Size([1, 640, 64, 64])
+h.shape:  torch.Size([1, 640, 64, 64]) emb.shape:  torch.Size([1, 1280]) context.shape:  torch.Size([1, 77, 768]) objs.shape:  torch.Size([1, 30, 768])
+===================
+x.shape torch.Size([1, 320, 64, 64])
+x.shape torch.Size([1, 320, 64, 64])
+x.shape torch.Size([1, 320, 64, 64])
+x.shape torch.Size([1, 4096, 320])
+h.shape:  torch.Size([1, 320, 64, 64])
+------------out-----------
+h.shape:  torch.Size([1, 320, 64, 64])
+out.shape:  torch.Size([1, 4, 64, 64])
+"""
 class TimestepBlock(nn.Module):
     """
     Any module where forward() takes timestep embeddings as a second argument.
@@ -427,7 +688,7 @@ grounding_tokenizer_input
         # = = = = = = = = = = = = = = = = = = = = Up Branch = = = = = = = = = = = = = = = = = = = = #
 
         self.output_blocks = nn.ModuleList([])
-        for level, mult in list(enumerate(channel_mult))[::-1]:
+        for level, mult in list(enumerate(channel_mult))[::-1]: # [ 4, 4, 2, 1]
             for i in range(num_res_blocks + 1):
                 ich = input_block_chans.pop()
                 layers = [
@@ -593,20 +854,25 @@ grounding_tokenizer_input
             context : (batch_size, 77, 768)
             objs : (B, max_objs, out_dim)
             """
-            print(f"------------{idx}-----------")
-            print("h.shape: ", h.shape)
-            print("emb.shape: ", emb.shape)
-            print("context.shape: ", context.shape)
-            print("objs.shape: ", objs.shape)
+            print(f"------------input_blocks{idx}-----------")
+            print("h.shape: ", h.shape, "emb.shape: ", emb.shape, "context.shape: ", context.shape, "objs.shape: ", objs.shape)
             h = module(h, emb, context, objs)
             print("h.shape: ", h.shape)
             hs.append(h)
-        raise NotImplementedError
-
+        # self.middle_block = [ RTR ]
+        print(f"------------middle_block-----------")
+        print("h.shape: ", h.shape, "emb.shape: ", emb.shape, "context.shape: ", context.shape, "objs.shape: ", objs.shape)
         h = self.middle_block(h, emb, context, objs)
-
-        for module in self.output_blocks:
+        print("h.shape: ", h.shape)
+        # self.output_blocks = [ R  R  RU | RT  RT  RTU |  RT  RT  RTU  |  RT  RT  RT  ]
+        for idx, module in enumerate(self.output_blocks):
             h = th.cat([h, hs.pop()], dim=1)
             h = module(h, emb, context, objs)
 
-        return self.out(h)
+        """
+------------out-----------
+h.shape:  torch.Size([1, 320, 64, 64])
+out.shape:  torch.Size([1, 4, 64, 64])
+        """
+        out = self.out(h)
+        return out

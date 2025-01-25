@@ -405,7 +405,6 @@ class BasicTransformerBlock(nn.Module):
         context: (B, N_text, C_out)
         objs: (B, N_obj, C_out)
         """
-        # TODO:
         x = self.attn1(self.norm1(x)) + x
         x = self.fuser(x, objs)  # identity mapping in the beginning
         x = self.attn2(self.norm2(x), context, context) + x
