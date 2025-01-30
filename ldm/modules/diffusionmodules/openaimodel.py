@@ -782,6 +782,7 @@ grounding_tokenizer_input
         breakpoint()  # TODO
 
     def forward(self, input):
+        # TODO: 여기서부터 다시 시작
         """
     input = dict(
         x=starting_noise,grounding_input
@@ -838,7 +839,6 @@ grounding_tokenizer_input
             h = th.cat([h, input["inpainting_extra_input"]], dim=1)
 
         # Text input
-        # TODO: 여기서부터
         context = input["context"] # (batch_size, 77, 768)
         # 77은 CLIP 모델에서 사용하는 텍스트 토큰의 최대 길이를 나타냄
         # CLIP 모델은 입력 텍스트를 토큰화하여 고정된 길이의 시퀀스로 변환하며,
@@ -854,16 +854,10 @@ grounding_tokenizer_input
             context : (batch_size, 77, 768)
             objs : (B, max_objs, out_dim)
             """
-            print(f"------------input_blocks{idx}-----------")
-            print("h.shape: ", h.shape, "emb.shape: ", emb.shape, "context.shape: ", context.shape, "objs.shape: ", objs.shape)
             h = module(h, emb, context, objs)
-            print("h.shape: ", h.shape)
             hs.append(h)
         # self.middle_block = [ RTR ]
-        print(f"------------middle_block-----------")
-        print("h.shape: ", h.shape, "emb.shape: ", emb.shape, "context.shape: ", context.shape, "objs.shape: ", objs.shape)
         h = self.middle_block(h, emb, context, objs)
-        print("h.shape: ", h.shape)
         # self.output_blocks = [ R  R  RU | RT  RT  RTU |  RT  RT  RTU  |  RT  RT  RT  ]
         for idx, module in enumerate(self.output_blocks):
             h = th.cat([h, hs.pop()], dim=1)

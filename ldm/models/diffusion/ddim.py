@@ -24,12 +24,16 @@ class DDIMSampler(object):
         self.model = model # 'ldm.modules.diffusionmodules.openaimodel.UNetModel'
         self.device = diffusion.betas.device
         self.ddpm_num_timesteps = diffusion.num_timesteps # 1000
-        self.schedule = schedule
+        self.schedule = schedule # "linear"
         """ alpha_generator(length, type)
+    설명
+        Gated Self attention 에서 사용하는데, v = v + alpha * (x 와 grounding condition token 의 attention 결과)   
+        에서의 alpha 값을 의미합니다.    
+        
         if length = 1000 step이면, 
-        0 step ~ 1000 * 0.3 = 300 step까지는 alpha=1
-        300 step ~ 300 step 구간에서는 linear decay from 1 to 0
-        300 step ~ 1000 step까지는 alpha=0
+            0 step ~ 1000 * 0.3 = 300 step까지는 alpha=1
+            300 step ~ 300 step 구간에서는 linear decay from 1 to 0
+            300 step ~ 1000 step까지는 alpha=0
         """
         self.alpha_generator_func = alpha_generator_func
         self.set_alpha_scale = set_alpha_scale
@@ -47,14 +51,17 @@ class DDIMSampler(object):
  [  1   5   9  13  , ... , 985 989 993 997]
  len(self.ddim_timesteps) = 250
         alphas_cumprod: shape (ddpm_num_timesteps) (1000,)
+
+        ddim_sigmas, ddim_alphas, ddim_alphas_prev : shape (ddim_num_steps) (250,)
         """
         self.ddim_timesteps = make_ddim_timesteps(
             ddim_discr_method=ddim_discretize,
             num_ddim_timesteps=ddim_num_steps,
             num_ddpm_timesteps=self.ddpm_num_timesteps,
             verbose=False)
-
-        alphas_cumprod = self.diffusion.alphas_cumprod # shape (ddpm_num_timesteps) (1000,)
+        # diffusion : 'ldm.models.diffusion.ldm.LatentDiffusion',
+        # shape (ddpm_num_timesteps) (1000,)
+        alphas_cumprod = self.diffusion.alphas_cumprod
         assert alphas_cumprod.shape[
             0] == self.ddpm_num_timesteps, 'alphas have to be defined for each timestep'
         to_torch = lambda x: x.clone().detach().to(torch.float32).to(self.device
@@ -90,6 +97,8 @@ class DDIMSampler(object):
         # ddim sampling parameters
         """
         ddim_sigmas, ddim_alphas, ddim_alphas_prev : shape (ddim_num_steps) (250,)
+        ddim_sigmas 는 전부 0
+        ddim_alphas 은 alphas_cumprod 에서 건너뛰면서 값을 가져옴
         """
         ddim_sigmas, ddim_alphas, ddim_alphas_prev = make_ddim_sampling_parameters(
             alphacums=alphas_cumprod.cpu(), # shape (ddpm_num_timesteps) (1000,)
@@ -139,6 +148,15 @@ class DDIMSampler(object):
     mask: inpainting_mask = None
     x0: z0 = None
         """
+        """ self.ddim_timesteps
+[  1   5   9  13  , ... , 985 989 993 997]
+len(self.ddim_timesteps) = 250
+        alphas_cumprod: shape (ddpm_num_timesteps) (1000,)
+
+        ddim_sigmas, ddim_alphas, ddim_alphas_prev : shape (ddim_num_steps) (250,)
+            ddim_sigmas 는 전부 0
+            ddim_alphas 은 alphas_cumprod 에서 건너뛰면서 값을 가져옴
+        """
         self.make_schedule(ddim_num_steps=S)
         return self.ddim_sampling(shape,
                                   input,
@@ -187,8 +205,10 @@ class DDIMSampler(object):
             input["x"] = img
         """
 self.ddim_timesteps
- [  1   5   9  13  , ... , 985 989 993 997]
- len(self.ddim_timesteps) = 250
+    [  1   5   9  13  , ... , 985 989 993 997]
+     total_steps = len(self.ddim_timesteps) = 250
+time_range
+    [ 997 993 989 985  , ... , 13 9 5 1]
         """
         time_range = np.flip(self.ddim_timesteps)
         total_steps = self.ddim_timesteps.shape[0]
@@ -198,18 +218,24 @@ self.ddim_timesteps
 
         if self.alpha_generator_func != None:
             """ alpha_generator(length, type)
+            # grounding 정보를 얼마나 반영할 것인지에 대한 가중치
+            denoising 초반에는 1로 설정하고, 그 후에는 0으로 설정
+            
             if length = 250 step이면, 
             0 step ~ 250 * 0.3 step까지는 alpha=1
             250 * 0.3 step ~ 250 * 0.3 step 구간에서는 linear decay from 1 to 0
             250 * 0.3 step ~ 250 step까지는 alpha=0
             """
+            # len(alphas) = 250
             alphas = self.alpha_generator_func(len(iterator))
-
+        # i: 0, 1, ... 249
+        # index: 249, 248, ... 0
+        # step: 997, 993, ... 1
         for i, step in enumerate(iterator):
-
             # set alpha
             if self.alpha_generator_func != None:
                 # self.model: ldm.modules.diffusionmodules.openaimodel.UNetModel
+                # UNetModel의 gated self attention 에서 사용하는 alpha 값을 설정
                 self.set_alpha_scale(self.model, alphas[i])
                 if alphas[i] == 0:
                     self.model.restore_first_conv_from_SD()
@@ -217,7 +243,7 @@ self.ddim_timesteps
             # run
             index = total_steps - i - 1 # 249, 248, ... 0
             input["timesteps"] = torch.full((b,),
-                                            step,
+                                            step, # 997, 993, ... 1
                                             device=self.device,
                                             dtype=torch.long)
 
@@ -236,7 +262,7 @@ self.ddim_timesteps
                 input["x"] = img
 
             img, pred_x0 = self.p_sample_ddim(input,
-                                              index=index,
+                                              index=index, # index: 249, 248, ... 0
                                               uc=uc,
                                               guidance_scale=guidance_scale)
             input["x"] = img
@@ -259,6 +285,7 @@ self.ddim_timesteps
             positive_embeddings: (batch_size, max_objs, 768)
         inpainting_extra_input=inpainting_extra_input,
         grounding_extra_input=grounding_extra_input,)
+    index: 249, 248, ... 0
     uc: (batch_size, 77, 768)
         - args.negative_prompt 로 부터 생성
         - 'longbody, lowres, bad anatomy, bad hands, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality'
@@ -266,6 +293,7 @@ self.ddim_timesteps
 
         """
         # self.model: ldm.modules.diffusionmodules.openaimodel.UNetModel
+        # e_t : (batch_size, c, image_size, image_size)
         e_t = self.model(input)
         if uc is not None and guidance_scale != 1:
             unconditional_input = dict(
@@ -288,6 +316,7 @@ self.ddim_timesteps
         sigma_t = torch.full((b, 1, 1, 1),
                              self.ddim_sigmas[index],
                              device=self.device)
+        # sqrt_one_minus_at = " root (1 - alpha) "
         sqrt_one_minus_at = torch.full((b, 1, 1, 1),
                                        self.ddim_sqrt_one_minus_alphas[index],
                                        device=self.device)

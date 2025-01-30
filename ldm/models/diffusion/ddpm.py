@@ -28,7 +28,7 @@ class DDPM(nn.Module):
                           linear_start=1e-4,
                           linear_end=2e-2,
                           cosine_s=8e-3):
-        # beta: (timesteps,)
+        # beta: (timesteps,) # linear_start ~ linear_end 사이의 값 (갈수록 커짐)
         betas = make_beta_schedule(beta_schedule,
                                    timesteps,
                                    linear_start=linear_start,

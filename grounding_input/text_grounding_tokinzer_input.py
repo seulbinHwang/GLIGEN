@@ -11,7 +11,13 @@ class GroundingNetInput:
         """
         batch should be the output from dataset.
         Please define here how to process the batch and prepare the 
-        input only for the ground tokenizer. 
+        input only for the ground tokenizer.
+
+        batch
+        print("boxes", out["boxes"].shape) # (1, max_objs, 4)
+        print("masks", out["masks"].shape) # (1, max_objs)
+        print("text_embeddings", out["text_embeddings"].shape) # (1, max_objs, 768)
+
         """
 
         self.set = True

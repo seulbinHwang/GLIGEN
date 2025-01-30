@@ -88,7 +88,7 @@ def load_ckpt(ckpt_path):
 {'target': 'ldm.models.autoencoder.AutoencoderKL', 
 'params': {'scale_factor': 0.18215, 'embed_dim': 4, 
 'ddconfig': {'double_z': True, 'z_channels': 4, 'resolution': 256, 'in_channels': 3, 'out_ch': 3, 'ch': 128, 'ch_mult': [1, 2, 4, 4], 'num_res_blocks': 2, 'attn_resolutions': [], 'dropout': 0.0}}}
-        - text encoder
+        - text_encoder
 {'target': 'ldm.modules.encoders.modules.FrozenCLIPEmbedder'}
         - diffusion
 {'target': 'ldm.models.diffusion.ldm.LatentDiffusion', 
@@ -186,6 +186,16 @@ def prepare_batch(meta, batch=1, max_objs=30):
     """meta
          phrases=["road", "intersection"],
          locations=[[0.45, 0.0, 0.55, 1.0], [0.0, 0.45, 1.0, 0.55]],
+
+        CLIP embedding을 사용하여 text와 image를 embedding하고,
+        이를 모델에 입력으로 사용할 수 있는 형태로 변환합니다.
+
+        print("boxes", out["boxes"].shape) # (B, max_objs, 4)
+        print("masks", out["masks"].shape) # (B, max_objs)
+        print("text_masks", out["text_masks"].shape) # (B, max_objs)
+        print("image_masks", out["image_masks"].shape) # (B, max_objs)
+        print("text_embeddings", out["text_embeddings"].shape) # (B, max_objs, 768)
+        print("image_embeddings", out["image_embeddings"].shape) # (B, max_objs, 768)
     """
     phrases, images = meta.get("phrases"), meta.get("images")
     images = [None] * len(phrases) if images == None else images
@@ -205,8 +215,10 @@ def prepare_batch(meta, batch=1, max_objs=30):
     text_features = []
     image_features = []
     for phrase, image in zip(phrases, images):
-        text_features.append(
-            get_clip_feature(model, processor, phrase, is_image=False))
+        # "road" -> (1, 768)
+        a = get_clip_feature(model, processor, phrase, is_image=False)
+        #print("a.shape", a.shape) # (1, 768)
+        text_features.append(a)
         image_features.append(
             get_clip_feature(model, processor, image, is_image=True))
 
@@ -223,9 +235,9 @@ def prepare_batch(meta, batch=1, max_objs=30):
 
     out = {
         "boxes":
-            boxes.unsqueeze(0).repeat(batch, 1, 1),
+            boxes.unsqueeze(0).repeat(batch, 1, 1), # (B, max_objs, 4)
         "masks":
-            masks.unsqueeze(0).repeat(batch, 1),
+            masks.unsqueeze(0).repeat(batch, 1), # (B, max_objs)
         "text_masks":
             text_masks.unsqueeze(0).repeat(batch, 1) *
             complete_mask(meta.get("text_mask"), max_objs),
@@ -237,14 +249,6 @@ def prepare_batch(meta, batch=1, max_objs=30):
         "image_embeddings":
             image_embeddings.unsqueeze(0).repeat(batch, 1, 1)
     }
-    """
-    print("boxes", out["boxes"].shape) # (1, max_objs, 4)
-    print("masks", out["masks"].shape) # (1, max_objs)
-    print("text_masks", out["text_masks"].shape) # (1, max_objs)
-    print("image_masks", out["image_masks"].shape) # (1, max_objs)
-    print("text_embeddings", out["text_embeddings"].shape) # (1, max_objs, 768)
-    print("image_embeddings", out["image_embeddings"].shape) # (1, max_objs, 768)
-    """
     return batch_to_device(out, device)
 
 
@@ -402,7 +406,7 @@ def run(meta, config, starting_noise=None):
         meta["ckpt"])
 
     ###
-    """
+    """ grounding_tokenizer_input
     dataloader와 grounding_tokenizer 사이의 중간 class
     grounding_input/__init__.py 을 참조
 
@@ -456,24 +460,30 @@ grounding_tokenizer_input
         print("image_embeddings", out["image_embeddings"].shape) # (1, max_objs, 768)
         """
         batch = prepare_batch(meta, config.batch_size)
-    # context: (batch_size, 77, 768)
     """
 77은 CLIP 모델에서 사용하는 텍스트 토큰의 최대 길이를 나타
 CLIP 모델은 입력 텍스트를 토큰화하여 고정된 길이의 시퀀스로 변환하며, 
     이 경우 최대 77개의 토큰으로 변환
     """
+    # "prompt": "A bird's-eye view of a complex road situation with high density of cars"
+    # context: (batch_size, 77, 768)
+    # {'target': 'ldm.modules.encoders.modules.FrozenCLIPEmbedder'}
     context = text_encoder.encode([meta["prompt"]] * config.batch_size)
     uc = text_encoder.encode(config.batch_size * [""])
+    # print("uc.shape", uc.shape) # (batch_size, 77, 768)
     if args.negative_prompt is not None:
         # uc: (batch_size, 77, 768)
         uc = text_encoder.encode(config.batch_size * [args.negative_prompt])
 
     # - - - - - sampler - - - - - #
     """ alpha_generator(length, type)
+    설명
+        Gated Self attention 에서 사용하는데, v = v + alpha * (x 와 grounding condition token 의 attention 결과)   
+        에서의 alpha 값을 의미합니다.    
     if length = 1000 step이면, 
-    0 step ~ 1000 * 0.3 = 300 step까지는 alpha=1
-    300 step ~ 300 step 구간에서는 linear decay from 1 to 0
-    300 step ~ 1000 step까지는 alpha=0
+        0 step ~ 1000 * 0.3 = 300 step까지는 alpha=1 (grounding token 을 엄청 중요하게 생각)
+        300 step ~ 300 step 구간에서는 linear decay from 1 to 0
+        300 step ~ 1000 step까지는 alpha=0 (grounding token 을 고려하지 않음)
     """
     alpha_generator_func = partial(alpha_generator, type=meta.get("alpha_type")) # [0.3, 0.0, 0.7]
     if config.no_plms:
@@ -513,13 +523,18 @@ CLIP 모델은 입력 텍스트를 토큰화하여 고정된 길이의 시퀀스
 dataloader와 grounding_tokenizer 사이의 중간 class 입니다.
 grounding_input/__init__.py 을 참조하세요.
 
+config['grounding_tokenizer_input']: 
+     {'target': 'grounding_input.text_grounding_tokinzer_input.GroundingNetInput'}
+grounding_tokenizer_input
+    <grounding_input.text_grounding_tokinzer_input.GroundingNetInput>
+
 grounding_input : Dict
     boxes: (batch_size, max_objs, 4)
     masks: (batch_size, max_objs)
     positive_embeddings: (batch_size, max_objs, 768)
     
     """
-    grounding_input = grounding_tokenizer_input.prepare(batch)
+    grounding_input: dict = grounding_tokenizer_input.prepare(batch)
     grounding_extra_input = None
     if grounding_downsampler_input != None:
         grounding_extra_input = grounding_downsampler_input.prepare(batch)
@@ -545,6 +560,14 @@ grounding_input : Dict
                                       guidance_scale=config.guidance_scale,
                                       mask=inpainting_mask,
                                       x0=z0)
+        """
+        - autoencoder
+{'target': 'ldm.models.autoencoder.AutoencoderKL', 
+'params': {'scale_factor': 0.18215, 'embed_dim': 4, 
+'ddconfig': {'double_z': True, 'z_channels': 4, 'resolution': 256, 'in_channels': 3, 'out_ch': 3, 
+'ch': 128, 'ch_mult': [1, 2, 4, 4], 'num_res_blocks': 2, 'attn_resolutions': [], 'dropout': 0.0}}}       
+        """
+        # samples_fake: (1, 4, 64, 64) -> (1, 3, 512, 512)
         samples_fake = autoencoder.decode(samples_fake)
 
     # - - - - - save - - - - - #

@@ -44,7 +44,8 @@ def Normalize(in_channels, num_groups=32):
 
 class Upsample(nn.Module):
 
-    def __init__(self, in_channels, with_conv):
+    def __init__(self, in_channels, with_conv: bool):
+
         super().__init__()
         self.with_conv = with_conv
         if self.with_conv:
@@ -133,7 +134,6 @@ class ResnetBlock(nn.Module):
         h = self.norm1(h)
         h = nonlinearity(h)
         h = self.conv1(h)
-
         if temb is not None:
             h = h + self.temb_proj(nonlinearity(temb))[:, :, None, None]
 
@@ -411,6 +411,12 @@ class Encoder(nn.Module):
                  use_linear_attn=False,
                  attn_type="vanilla",
                  **ignore_kwargs):
+        """
+    {'double_z': True, 'z_channels': 4, 'resolution': 256,
+    'in_channels': 3, 'ch': 128, 'ch_mult': [1, 2, 4, 4],
+    'num_res_blocks': 2, 'attn_resolutions': [], 'dropout': 0.0}}}
+
+        """
         super().__init__()
         if use_linear_attn:
             attn_type = "linear"
@@ -522,12 +528,18 @@ class Decoder(nn.Module):
                  use_linear_attn=False,
                  attn_type="vanilla",
                  **ignorekwargs):
+        """
+    {'z_channels': 4, 'resolution': 256,
+    'in_channels': 3, 'out_ch': 3, 'ch': 128, 'ch_mult': [1, 2, 4, 4],
+    'num_res_blocks': 2, 'attn_resolutions': [], 'dropout': 0.0}}}
+
+        """
         super().__init__()
         if use_linear_attn:
             attn_type = "linear"
-        self.ch = ch
+        self.ch = ch # 128
         self.temb_ch = 0
-        self.num_resolutions = len(ch_mult)
+        self.num_resolutions = len(ch_mult) # 4
         self.num_res_blocks = num_res_blocks
         self.resolution = resolution
         self.in_channels = in_channels
@@ -536,7 +548,7 @@ class Decoder(nn.Module):
 
         # compute in_ch_mult, block_in and curr_res at lowest res
         in_ch_mult = (1,) + tuple(ch_mult)
-        block_in = ch * ch_mult[self.num_resolutions - 1]
+        block_in = ch * ch_mult[self.num_resolutions - 1] # 128 * 4 = 512
         curr_res = resolution // 2**(self.num_resolutions - 1)
         self.z_shape = (1, z_channels, curr_res, curr_res)
         print("Working with z of shape {} = {} dimensions.".format(
@@ -553,46 +565,55 @@ class Decoder(nn.Module):
         self.mid = nn.Module()
         self.mid.block_1 = ResnetBlock(in_channels=block_in,
                                        out_channels=block_in,
-                                       temb_channels=self.temb_ch,
-                                       dropout=dropout)
+                                       temb_channels=self.temb_ch, # 0
+                                       dropout=dropout) # 0.0
         self.mid.attn_1 = make_attn(block_in, attn_type=attn_type)
         self.mid.block_2 = ResnetBlock(in_channels=block_in,
                                        out_channels=block_in,
-                                       temb_channels=self.temb_ch,
-                                       dropout=dropout)
+                                       temb_channels=self.temb_ch, # 0
+                                       dropout=dropout) # 0.0
 
         # upsampling
         self.up = nn.ModuleList()
         for i_level in reversed(range(self.num_resolutions)):
+            # i_level: 3, 2, 1, 0
             block = nn.ModuleList()
             attn = nn.ModuleList()
+            # ch_mult: [1, 2, 4, 4]
+            # block_out: 128 * 4, 128 * 4, 128 * 2, 128
             block_out = ch * ch_mult[i_level]
             for i_block in range(self.num_res_blocks + 1):
+                # i_block: 0 , 1 , 2
                 block.append(
-                    ResnetBlock(in_channels=block_in,
-                                out_channels=block_out,
-                                temb_channels=self.temb_ch,
-                                dropout=dropout))
+                    ResnetBlock(in_channels=block_in, # 512 -> 512 -> 512 -> 256
+                                out_channels=block_out, # 512 -> 512 -> 256 -> 128
+                                temb_channels=self.temb_ch, # 0
+                                dropout=dropout)
+                )
                 block_in = block_out
-                if curr_res in attn_resolutions:
+                if curr_res in attn_resolutions: # attn_resolutions = []
                     attn.append(make_attn(block_in, attn_type=attn_type))
             up = nn.Module()
-            up.block = block
+            up.block = block # num_res_blocks 개 만큼의 block
             up.attn = attn
             if i_level != 0:
-                up.upsample = Upsample(block_in, resamp_with_conv)
+                up.upsample = Upsample(block_in, resamp_with_conv) # resamp_with_conv = True
                 curr_res = curr_res * 2
             self.up.insert(0, up)  # prepend to get consistent order
+            # self.up: [ i_level 0 (Up sample 없음) , i_level 1, i_level 2, i_level 3]
 
         # end
         self.norm_out = Normalize(block_in)
         self.conv_out = torch.nn.Conv2d(block_in,
-                                        out_ch,
+                                        out_ch, # 3
                                         kernel_size=3,
                                         stride=1,
                                         padding=1)
 
     def forward(self, z):
+        """
+        z: (B, z_channels = 4 , H, W)
+        """
         #assert z.shape[1:] == self.z_shape[1:]
         self.last_z_shape = z.shape
 
@@ -600,31 +621,65 @@ class Decoder(nn.Module):
         temb = None
 
         # z to block_in
-        h = self.conv_in(z)
+        # conv_in : Conv2d
+        h = self.conv_in(z) # (B, z_channels=4, H, W) -> (B, block_in=512, H, W)
 
-        # middle
-        h = self.mid.block_1(h, temb)
-        h = self.mid.attn_1(h)
-        h = self.mid.block_2(h, temb)
+        # middle: block_1 = ResnetBlock + attn_1 = AttnBlock + block_2 = ResnetBlock
+        """
+        ResnetBlock
+            norm1 / nonlinearity / conv1
+            norm2 / nonlinearity / dropout / conv2
+        AttnBlock
+            self attention
+        """
+        h = self.mid.block_1(h, temb) # h: (B, block_in=512, H, W)
+        h = self.mid.attn_1(h) # h: (B, block_in=512, H, W)
+        h = self.mid.block_2(h, temb) # h: (B, block_in, H, W)
 
         # upsampling
+        # image : ( 64 by 64 -> 128 -> 256 -> 512) -> 512`
+        # channel: (512 -> 512 -> 256 -> 128)
+        """
+        self.up -> [ i_level 0 (Up sample 없음) , i_level 1, i_level 2, i_level 3]
+            i_level 0  (B, 512, 64, 64) -> (B, 512, 128, 128)
+                block: [ResnetBlock, ResnetBlock, ResnetBlock] # self.num_res_blocks + 1 개 만큼 있음
+                    # 512 -> 512 channel
+                upsample: 64 -> 128
+                    torch.nn.functional.interpolate(x, scale_factor=2.0, mode="nearest")
+                    conv
+            i_level 1 (B, 512, 128, 128) -> (B, 512, 256, 256)
+                block
+                    # 512 -> 512  channel
+                upsample: 128 -> 256
+            i_level 2 (B, 512, 256, 256) -> (B, 256, 512, 512)
+                block
+                    # 512 -> 256 channel
+                upsample: 256 -> 512
+            i_level 3 (B, 256, 512, 512) -> (B, 128, 512, 512)
+                block
+                    # 256 -> 128 channel
+                            
+        """
         for i_level in reversed(range(self.num_resolutions)):
-            for i_block in range(self.num_res_blocks + 1):
-                h = self.up[i_level].block[i_block](h, temb)
+            # i_level:  3, 2, 1, 0
+            for i_block in range(self.num_res_blocks + 1): # num_res_blocks = 2
+                # i_block : 0, 1, 2
+                h = self.up[i_level].block[i_block](h, temb)  # h: (B, block_in, H, W)
                 if len(self.up[i_level].attn) > 0:
-                    h = self.up[i_level].attn[i_block](h)
+                    h = self.up[i_level].attn[i_block](h) # sampling 시에는 없더라.
             if i_level != 0:
+                # h: (B, block_in, H, W) -> (B, block_in, 2H, 2W)
                 h = self.up[i_level].upsample(h)
 
         # end
-        if self.give_pre_end:
+        if self.give_pre_end: # False
             return h
 
-        h = self.norm_out(h)
-        h = nonlinearity(h)
-        h = self.conv_out(h)
+        h = self.norm_out(h) # h: (B, 128, 512, 512)
+        h = nonlinearity(h) # h: (B, 128, 512, 512)
+        h = self.conv_out(h) # h: (B, 128, 512, 512) -> (B, 3, 512, 512)
         if self.tanh_out:
-            h = torch.tanh(h)
+            h = torch.tanh(h) # h: (B, 3, 512, 512)
         return h
 
 
