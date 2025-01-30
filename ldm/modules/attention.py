@@ -459,15 +459,10 @@ class SpatialTransformer(nn.Module):
         objs: (B, max_objs, C_out)
         """
         b, c, h, w = x.shape
-        print("===================")
-        print("x.shape", x.shape)
         x_in = x
         x = self.norm(x) # ( b, c, h, w) -> (b, c, h, w)
-        print("x.shape", x.shape)
         x = self.proj_in(x) # ( b, c, h, w) -> (b, c, h, w)
-        print("x.shape", x.shape)
         x = rearrange(x, 'b c h w -> b (h w) c') # (b, c, h, w) -> (b, h*w, c)
-        print("x.shape", x.shape)
         for idx, block in enumerate(self.transformer_blocks):
             """
             x: (b, h*w, c)

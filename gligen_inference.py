@@ -17,6 +17,7 @@ from functools import partial
 import torchvision.transforms.functional as F
 import torchvision.transforms.functional as TF
 import torchvision.transforms as transforms
+import time
 
 device = "cuda"
 
@@ -491,7 +492,7 @@ CLIP 모델은 입력 텍스트를 토큰화하여 고정된 길이의 시퀀스
                               model,
                               alpha_generator_func=alpha_generator_func,
                               set_alpha_scale=set_alpha_scale)
-        steps = 250
+        steps = 50
     else:
         sampler = PLMSSampler(diffusion,
                               model,
@@ -552,6 +553,7 @@ grounding_input : Dict
     # shape: (1, 4, 64, 64)
     shape = (config.batch_size, model.in_channels, model.image_size,
              model.image_size)
+    start_time = time.time()
     with torch.no_grad(), torch.cuda.amp.autocast():
         samples_fake = sampler.sample(S=steps,
                                       shape=shape,
@@ -569,7 +571,7 @@ grounding_input : Dict
         """
         # samples_fake: (1, 4, 64, 64) -> (1, 3, 512, 512)
         samples_fake = autoencoder.decode(samples_fake)
-
+    print("time", time.time() - start_time)
     # - - - - - save - - - - - #
     output_folder = os.path.join(args.folder, meta["save_folder_name"])
     os.makedirs(output_folder, exist_ok=True)
